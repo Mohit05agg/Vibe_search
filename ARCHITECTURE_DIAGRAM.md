@@ -472,6 +472,5 @@ START HERE
          ▼
     MASTERED!
 ```
-
-Use these diagrams to visualize and explain the architecture! 🎨
+ 🎨
 
