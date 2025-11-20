@@ -19,6 +19,7 @@ export default function SearchInterface({
   const [query, setQuery] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageTextQuery, setImageTextQuery] = useState("");
   const [searchType, setSearchType] = useState<"text" | "image">("text");
 
   const handleTextSearch = async (e: React.FormEvent) => {
@@ -58,6 +59,11 @@ export default function SearchInterface({
       const formData = new FormData();
       formData.append("image_file", imageFile);
       formData.append("limit", "20");
+      
+      // Add text query if provided
+      if (imageTextQuery.trim()) {
+        formData.append("text_query", imageTextQuery.trim());
+      }
 
       const response = await fetch(`${API_URL}/api/search/image/upload`, {
         method: "POST",
@@ -153,6 +159,21 @@ export default function SearchInterface({
               </div>
             )}
           </div>
+          
+          <div>
+            <input
+              type="text"
+              value={imageTextQuery}
+              onChange={(e) => setImageTextQuery(e.target.value)}
+              placeholder="Optional: Add text query (e.g., 'same vibe but different colors', 'more casual style')"
+              className="w-full px-5 py-3 rounded-xl border border-gray-200 bg-gray-50 text-black placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              disabled={isSearching}
+            />
+            <p className="mt-2 text-sm text-gray-500">
+              Combine your image with a text description to refine your search
+            </p>
+          </div>
+          
           <button
             type="submit"
             disabled={isSearching || !imageFile}

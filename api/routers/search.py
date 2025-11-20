@@ -117,20 +117,29 @@ async def search_by_image(request: ImageSearchRequest):
 @router.post("/image/upload", response_model=SearchResponse)
 async def search_by_image_upload(
     image_file: UploadFile = File(...),
+    text_query: Optional[str] = Form(None),
     limit: int = Form(20),
     category: Optional[str] = Form(None),
     brand: Optional[str] = Form(None),
     min_price: Optional[float] = Form(None),
     max_price: Optional[float] = Form(None),
     colors: Optional[str] = Form(None),
-    gender: Optional[str] = Form(None)
+    gender: Optional[str] = Form(None),
+    image_weight: float = Form(0.7, description="Weight for image embedding (0-1), text weight = 1 - image_weight")
 ):
     """
-    Search products by uploaded image file.
+    Search products by uploaded image file with optional text query.
     
-    Accepts an uploaded image file and returns visually similar products.
+    Accepts an uploaded image file and optional text query (e.g., "same vibe but different colors").
+    Combines image and text embeddings using CLIP for multimodal search.
     """
     start_time = time.time()
+    
+    # Validate weights
+    if not 0 <= image_weight <= 1:
+        raise HTTPException(status_code=400, detail="image_weight must be between 0 and 1")
+    
+    text_weight = 1.0 - image_weight
     
     # Read uploaded file
     contents = await image_file.read()
@@ -141,17 +150,40 @@ async def search_by_image_upload(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image file: {str(e)}")
     
-    # Generate embedding
+    # Generate embeddings using CLIP (can encode both images and text)
     model, processor = get_clip_model()
-    inputs = processor(images=image, return_tensors="pt")
     
+    # Generate image embedding
+    image_inputs = processor(images=image, return_tensors="pt")
     if torch.cuda.is_available():
-        inputs = {k: v.cuda() for k, v in inputs.items()}
+        image_inputs = {k: v.cuda() for k, v in image_inputs.items()}
     
     with torch.no_grad():
-        image_features = model.get_image_features(**inputs)
+        image_features = model.get_image_features(**image_inputs)
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        query_embedding = image_features[0].cpu().numpy().tolist()
+        image_embedding_tensor = image_features[0]
+    
+    # Generate text embedding if provided
+    if text_query and text_query.strip():
+        text_inputs = processor(text=[text_query.strip()], return_tensors="pt", padding=True, truncation=True)
+        if torch.cuda.is_available():
+            text_inputs = {k: v.cuda() for k, v in text_inputs.items()}
+            # Ensure image embedding is on same device
+            image_embedding_tensor = image_embedding_tensor.cuda()
+        
+        with torch.no_grad():
+            text_features = model.get_text_features(**text_inputs)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            text_embedding_tensor = text_features[0]
+        
+        # Combine embeddings with weighted average
+        combined_embedding = (image_weight * image_embedding_tensor + text_weight * text_embedding_tensor)
+        # Renormalize
+        combined_embedding = combined_embedding / combined_embedding.norm(dim=-1, keepdim=True)
+        query_embedding = combined_embedding.cpu().numpy().tolist()
+    else:
+        # Only image embedding
+        query_embedding = image_embedding_tensor.cpu().numpy().tolist()
     
     # Parse colors filter
     color_list = None
