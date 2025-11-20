@@ -87,12 +87,19 @@ async def search_by_image(request: ImageSearchRequest):
     min_price_filter = None if (request.min_price is not None and request.min_price == 0) else request.min_price
     max_price_filter = None if (request.max_price is not None and request.max_price == 0) else request.max_price
     
+    # Filter out "string" placeholder values from colors list
+    colors_filter = None
+    if request.colors:
+        colors_filter = [c for c in request.colors if c.lower() != "string"]
+        if not colors_filter:  # If all were "string", set to None
+            colors_filter = None
+    
     filter_conditions = build_filter_query(
         category=request.category,
         brand=request.brand,
         min_price=min_price_filter,
         max_price=max_price_filter,
-        colors=request.colors,
+        colors=colors_filter,
         gender=request.gender
     )
     
@@ -249,14 +256,25 @@ async def search_by_text(request: TextSearchRequest):
     min_price_filter = None if (request.min_price is not None and request.min_price == 0) else request.min_price
     max_price_filter = None if (request.max_price is not None and request.max_price == 0) else request.max_price
     
+    # Filter out "string" placeholder values from colors list
+    colors_filter = None
+    if request.colors:
+        colors_filter = [c for c in request.colors if c.lower() != "string"]
+        if not colors_filter:  # If all were "string", set to None
+            colors_filter = None
+    
     filter_conditions = build_filter_query(
         category=request.category,
         brand=request.brand,
         min_price=min_price_filter,
         max_price=max_price_filter,
-        colors=request.colors,
+        colors=colors_filter,
         gender=request.gender
     )
+    
+    # Debug: Log the filter conditions (remove in production)
+    import logging
+    logging.info(f"Text search filter: {filter_conditions}")
     
     # Execute vector search
     conn = get_db_connection()
