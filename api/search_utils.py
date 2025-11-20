@@ -31,30 +31,34 @@ def build_filter_query(
     """
     conditions = []
     
-    if category:
+    # Ignore placeholder "string" values from API docs
+    if category and category.lower() != "string":
         category_escaped = category.replace("'", "''")
         conditions.append(f"category = '{category_escaped}'")
     
-    if brand:
+    if brand and brand.lower() != "string":
         brand_escaped = brand.replace("'", "''")
         conditions.append(f"brand_name = '{brand_escaped}'")
     
-    if min_price is not None:
+    if min_price is not None and min_price > 0:
         conditions.append(f"lowest_price >= {min_price}")
     
-    if max_price is not None:
+    if max_price is not None and max_price > 0:
         conditions.append(f"lowest_price <= {max_price}")
     
     if colors:
         # Check if any of the colors match in extracted_colors array
+        # Ignore placeholder "string" values from API docs
         color_conditions = []
         for color in colors:
-            color_clean = color.replace("'", "''")
-            color_conditions.append(f"'{color_clean}' = ANY(extracted_colors)")
+            if color.lower() != "string":
+                color_clean = color.replace("'", "''")
+                color_conditions.append(f"'{color_clean}' = ANY(extracted_colors)")
         if color_conditions:
             conditions.append(f"({' OR '.join(color_conditions)})")
     
-    if gender:
+    # Ignore placeholder "string" values from API docs
+    if gender and gender.lower() != "string":
         gender_escaped = gender.replace("'", "''")
         conditions.append(f"gender = '{gender_escaped}'")
     

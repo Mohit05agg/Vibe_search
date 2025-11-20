@@ -83,11 +83,15 @@ async def search_by_image(request: ImageSearchRequest):
         query_embedding = image_features[0].cpu().numpy().tolist()
     
     # Build filter conditions
+    # Convert 0 to None for price filters (0 means "no filter")
+    min_price_filter = None if (request.min_price is not None and request.min_price == 0) else request.min_price
+    max_price_filter = None if (request.max_price is not None and request.max_price == 0) else request.max_price
+    
     filter_conditions = build_filter_query(
         category=request.category,
         brand=request.brand,
-        min_price=request.min_price,
-        max_price=request.max_price,
+        min_price=min_price_filter,
+        max_price=max_price_filter,
         colors=request.colors,
         gender=request.gender
     )
@@ -191,11 +195,15 @@ async def search_by_image_upload(
         color_list = [c.strip() for c in colors.split(",") if c.strip()]
     
     # Build filter conditions
+    # Convert 0 to None for price filters (0 means "no filter")
+    min_price_filter = None if (min_price is not None and min_price == 0) else min_price
+    max_price_filter = None if (max_price is not None and max_price == 0) else max_price
+    
     filter_conditions = build_filter_query(
         category=category,
         brand=brand,
-        min_price=min_price,
-        max_price=max_price,
+        min_price=min_price_filter,
+        max_price=max_price_filter,
         colors=color_list,
         gender=gender
     )
@@ -237,11 +245,15 @@ async def search_by_text(request: TextSearchRequest):
     query_embedding = model.encode(request.query, normalize_embeddings=True).tolist()
     
     # Build filter conditions
+    # Convert 0 to None for price filters (0 means "no filter")
+    min_price_filter = None if (request.min_price is not None and request.min_price == 0) else request.min_price
+    max_price_filter = None if (request.max_price is not None and request.max_price == 0) else request.max_price
+    
     filter_conditions = build_filter_query(
         category=request.category,
         brand=request.brand,
-        min_price=request.min_price,
-        max_price=request.max_price,
+        min_price=min_price_filter,
+        max_price=max_price_filter,
         colors=request.colors,
         gender=request.gender
     )
