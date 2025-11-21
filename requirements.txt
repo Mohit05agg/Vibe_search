@@ -12,6 +12,11 @@ torch==2.1.0
 transformers==4.35.2
 Pillow==10.1.0
 
+# Computer Vision and Object Detection
+ultralytics==8.1.0  # YOLOv8/YOLOv11
+opencv-python==4.8.1.78
+nudenet==1.0.0  # NSFW detection
+
 # Web framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0

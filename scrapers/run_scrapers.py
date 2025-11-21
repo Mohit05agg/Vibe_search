@@ -61,7 +61,7 @@ INSTAGRAM_TARGETS = [
 ]
 
 
-def scrape_pinterest(targets: list, limit_per_target: int = 25):
+def scrape_pinterest(targets: list, limit_per_target: int = 25, fast_mode: bool = False):
     """Scrape Pinterest boards."""
     print("=" * 60)
     print("Starting Pinterest Scraping")
@@ -69,15 +69,21 @@ def scrape_pinterest(targets: list, limit_per_target: int = 25):
     
     total_scraped = 0
     
-    with PinterestScraper(headless=True) as scraper:
+    # Use faster settings if fast_mode
+    scraper_kwargs = {}
+    if fast_mode:
+        scraper_kwargs['min_delay'] = 1.0
+        scraper_kwargs['max_delay'] = 2.0
+    
+    with PinterestScraper(headless=True, enable_ai_processing=True, **scraper_kwargs) as scraper:
         for target in targets:
             print(f"\nScraping Pinterest: {target}")
             try:
                 images = scraper.scrape(target, limit=limit_per_target)
                 total_scraped += len(images)
-                print(f"✓ Scraped {len(images)} images from {target}")
+                print(f"[OK] Scraped {len(images)} images from {target}")
             except Exception as e:
-                print(f"✗ Error scraping {target}: {e}")
+                print(f"[ERROR] Error scraping {target}: {e}")
     
     print(f"\n{'='*60}")
     print(f"Pinterest scraping complete: {total_scraped} total images")
@@ -153,7 +159,9 @@ def main():
     total = 0
     
     if args.source in ['pinterest', 'all']:
-        total += scrape_pinterest(pinterest_targets, args.limit)
+        # Use fast mode for smaller limits (faster processing)
+        fast_mode = args.limit <= 10
+        total += scrape_pinterest(pinterest_targets, args.limit, fast_mode=fast_mode)
     
     if args.source in ['instagram', 'all']:
         total += scrape_instagram(instagram_targets, args.limit)

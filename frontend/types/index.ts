@@ -27,5 +27,21 @@ export interface ScrapedImage {
   engagement_count: number;
   username?: string;
   board_name?: string;
+  scraped_at?: string;
+  // AI-processed fields
+  detected_class?: string;
+  bbox?: number[];  // [x1, y1, x2, y2]
+  extracted_colors?: string[];
+  extracted_styles?: string[];
+  extracted_brands?: string[];
+  local_path?: string;
+  quality_score?: {
+    score?: number;
+    blur?: number;
+    brightness?: number;
+    colorfulness?: number;
+    is_acceptable?: boolean;
+    nsfw_score?: number;
+  };
 }
 

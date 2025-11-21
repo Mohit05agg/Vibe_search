@@ -53,3 +53,34 @@ class TextSearchRequest(BaseModel):
     colors: Optional[List[str]] = Field(None, description="Filter by colors")
     gender: Optional[str] = Field(None, description="Filter by gender")
 
+
+class ScrapedImageResponse(BaseModel):
+    """Scraped image response model with AI-processed data."""
+    id: int
+    source: str
+    source_url: str
+    image_url: str
+    caption: Optional[str] = None
+    hashtags: Optional[List[str]] = None
+    engagement_count: int = 0
+    username: Optional[str] = None
+    board_name: Optional[str] = None
+    scraped_at: Optional[str] = None
+    # AI-processed fields
+    detected_class: Optional[str] = None
+    bbox: Optional[List[int]] = None
+    extracted_colors: Optional[List[str]] = None
+    extracted_styles: Optional[List[str]] = None
+    extracted_brands: Optional[List[str]] = None
+    local_path: Optional[str] = None
+    quality_score: Optional[dict] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class ScrapedImagesResponse(BaseModel):
+    """Response model for scraped images list."""
+    images: List[ScrapedImageResponse]
+    total: int
+

@@ -1,5 +1,6 @@
 """
 Instagram scraper using Playwright.
+Enhanced with AI processing pipeline (object detection, embeddings, quality filtering).
 Note: Instagram has strict anti-bot measures. This scraper uses basic techniques.
 For production, consider using Instagram API or specialized tools.
 """
@@ -7,26 +8,61 @@ For production, consider using Instagram API or specialized tools.
 import re
 import time
 import json
+import logging
 from typing import List, Dict, Optional
+from pathlib import Path
 from playwright.sync_api import sync_playwright, Browser, Page
 
 from scrapers.base_scraper import BaseScraper
+
+# Add parent directory to path for AI modules
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from ai.processing_pipeline import ImageProcessingPipeline
+    AI_AVAILABLE = True
+except ImportError:
+    AI_AVAILABLE = False
+    logging.warning("AI processing modules not available. Install dependencies: pip install ultralytics opencv-python nudenet")
+
+logger = logging.getLogger(__name__)
 
 
 class InstagramScraper(BaseScraper):
     """Scraper for Instagram posts and profiles."""
     
-    def __init__(self, headless: bool = True, **kwargs):
+    def __init__(
+        self,
+        headless: bool = True,
+        enable_ai_processing: bool = True,
+        download_dir: Optional[str] = None,
+        **kwargs
+    ):
         """
         Initialize Instagram scraper.
         
         Args:
             headless: Run browser in headless mode
+            enable_ai_processing: Enable AI processing pipeline
+            download_dir: Directory to save downloaded images
         """
         super().__init__(min_delay=3.0, max_delay=7.0, **kwargs)  # Longer delays for Instagram
         self.headless = headless
         self.playwright = None
         self.browser: Optional[Browser] = None
+        self.enable_ai_processing = enable_ai_processing and AI_AVAILABLE
+        self.processing_pipeline = None
+        
+        if self.enable_ai_processing:
+            try:
+                self.processing_pipeline = ImageProcessingPipeline(
+                    download_dir=download_dir,
+                    max_workers=4,
+                    save_local=download_dir is not None
+                )
+            except Exception as e:
+                logger.warning(f"Could not initialize AI processing pipeline: {e}")
+                self.enable_ai_processing = False
     
     def __enter__(self):
         """Context manager entry."""
@@ -77,9 +113,30 @@ class InstagramScraper(BaseScraper):
         
         profile_url = f"https://www.instagram.com/{username}/"
         
-        # Check if browser is still open
+        # Check if browser is still open, recreate if needed
         if not self.browser or not self.browser.is_connected():
-            raise RuntimeError("Browser connection lost. Please restart scraper.")
+            logger.warning(f"Browser connection lost for @{username}, attempting to recreate...")
+            try:
+                # Try to recreate browser context
+                if self.playwright:
+                    self.browser = self.playwright.chromium.launch(
+                        headless=self.headless,
+                        args=[
+                            '--no-sandbox',
+                            '--disable-blink-features=AutomationControlled',
+                            '--disable-dev-shm-usage',
+                            '--disable-setuid-sandbox',
+                            '--no-first-run',
+                            '--no-zygote',
+                            '--single-process',
+                            '--disable-gpu'
+                        ]
+                    )
+                else:
+                    raise RuntimeError("Playwright not initialized")
+            except Exception as e:
+                logger.error(f"Failed to recreate browser: {e}")
+                raise RuntimeError("Browser connection lost. Please restart scraper.")
         
         page = None
         scraped_images = []
@@ -218,9 +275,55 @@ class InstagramScraper(BaseScraper):
                         'board_name': None
                     }
                     
-                    if self.save_scraped_image(**image_data):
-                        images.append(image_data)
-                        print(f"Scraped {len(images)}/{limit} images from grid...")
+                    # Process with AI pipeline if enabled
+                    if self.enable_ai_processing and self.processing_pipeline:
+                        try:
+                            processed_result = self.processing_pipeline.process_image(
+                                image_url=image_url,
+                                caption=alt_text,
+                                source='instagram',
+                                source_url=post_link or f"https://www.instagram.com/{username}/"
+                            )
+                            
+                            if processed_result:
+                                # Extract from unified result structure
+                                detections = processed_result.get('detections', {})
+                                primary = detections.get('primary') if detections else None
+                                # Safely extract primary detection fields
+                                primary_dict = primary if isinstance(primary, dict) else {}
+                                quality = processed_result.get('quality', {})
+                                
+                                # Merge processed result with original data
+                                image_data.update({
+                                    'detected_class': primary_dict.get('detected_class') if primary_dict else None,
+                                    'bbox': primary_dict.get('bbox') if primary_dict else None,
+                                    'embedding': processed_result.get('embedding'),
+                                    'colors': processed_result.get('colors', []),
+                                    'styles': processed_result.get('styles', []),
+                                    'brands': processed_result.get('brands', []),
+                                    'local_path': processed_result.get('local_path'),
+                                    'quality_score': quality  # Unified quality structure
+                                })
+                                
+                                # Save to database with enhanced data
+                                if self.save_scraped_image_enhanced(**image_data):
+                                    images.append(image_data)
+                                    print(f"Scraped and processed {len(images)}/{limit} images from grid...")
+                            else:
+                                # Processing failed, save basic data
+                                if self.save_scraped_image(**image_data):
+                                    images.append(image_data)
+                                    print(f"Scraped {len(images)}/{limit} images from grid (AI processing skipped)...")
+                        except Exception as e:
+                            logger.error(f"Error in AI processing: {e}")
+                            # Fallback to basic save
+                            if self.save_scraped_image(**image_data):
+                                images.append(image_data)
+                    else:
+                        # Save to database without AI processing
+                        if self.save_scraped_image(**image_data):
+                            images.append(image_data)
+                            print(f"Scraped {len(images)}/{limit} images from grid...")
                     
                 except Exception as e:
                     continue
@@ -298,9 +401,55 @@ class InstagramScraper(BaseScraper):
                         'board_name': None
                     }
                     
-                    if self.save_scraped_image(**image_data):
-                        images.append(image_data)
-                        print(f"Scraped {len(images)}/{limit} images from posts...")
+                    # Process with AI pipeline if enabled
+                    if self.enable_ai_processing and self.processing_pipeline:
+                        try:
+                            processed_result = self.processing_pipeline.process_image(
+                                image_url=image_url,
+                                caption=caption,
+                                source='instagram',
+                                source_url=post_url
+                            )
+                            
+                            if processed_result:
+                                # Extract from unified result structure
+                                detections = processed_result.get('detections', {})
+                                primary = detections.get('primary') if detections else None
+                                # Safely extract primary detection fields
+                                primary_dict = primary if isinstance(primary, dict) else {}
+                                quality = processed_result.get('quality', {})
+                                
+                                # Merge processed result with original data
+                                image_data.update({
+                                    'detected_class': primary_dict.get('detected_class') if primary_dict else None,
+                                    'bbox': primary_dict.get('bbox') if primary_dict else None,
+                                    'embedding': processed_result.get('embedding'),
+                                    'colors': processed_result.get('colors', []),
+                                    'styles': processed_result.get('styles', []),
+                                    'brands': processed_result.get('brands', []),
+                                    'local_path': processed_result.get('local_path'),
+                                    'quality_score': quality  # Unified quality structure
+                                })
+                                
+                                # Save to database with enhanced data
+                                if self.save_scraped_image_enhanced(**image_data):
+                                    images.append(image_data)
+                                    print(f"Scraped and processed {len(images)}/{limit} images from posts...")
+                            else:
+                                # Processing failed, save basic data
+                                if self.save_scraped_image(**image_data):
+                                    images.append(image_data)
+                                    print(f"Scraped {len(images)}/{limit} images from posts (AI processing skipped)...")
+                        except Exception as e:
+                            logger.error(f"Error in AI processing: {e}")
+                            # Fallback to basic save
+                            if self.save_scraped_image(**image_data):
+                                images.append(image_data)
+                    else:
+                        # Save to database without AI processing
+                        if self.save_scraped_image(**image_data):
+                            images.append(image_data)
+                            print(f"Scraped {len(images)}/{limit} images from posts...")
                     
                     self.random_delay()
                     
@@ -367,9 +516,48 @@ class InstagramScraper(BaseScraper):
                             'board_name': None
                         }
                         
-                        if self.save_scraped_image(**image_data):
-                            images.append(image_data)
-                            print(f"Scraped {len(images)}/{limit} images from JSON...")
+                        # Process with AI pipeline if enabled
+                        if self.enable_ai_processing and self.processing_pipeline:
+                            try:
+                                processed_result = self.processing_pipeline.process_image(
+                                    image_url=image_url,
+                                    caption=caption,
+                                    source='instagram',
+                                    source_url=post_url
+                                )
+                                
+                                if processed_result:
+                                    # Merge processed result with original data
+                                    image_data.update({
+                                        'detected_class': processed_result.get('detected_class'),
+                                        'bbox': processed_result.get('bbox'),
+                                        'embedding': processed_result.get('embedding'),
+                                        'colors': processed_result.get('colors', []),
+                                        'styles': processed_result.get('styles', []),
+                                        'brands': processed_result.get('brands', []),
+                                        'local_path': processed_result.get('local_path'),
+                                        'quality_score': processed_result.get('quality_score', {})
+                                    })
+                                    
+                                    # Save to database with enhanced data
+                                    if self.save_scraped_image_enhanced(**image_data):
+                                        images.append(image_data)
+                                        print(f"Scraped and processed {len(images)}/{limit} images from JSON...")
+                                else:
+                                    # Processing failed, save basic data
+                                    if self.save_scraped_image(**image_data):
+                                        images.append(image_data)
+                                        print(f"Scraped {len(images)}/{limit} images from JSON (AI processing skipped)...")
+                            except Exception as e:
+                                logger.error(f"Error in AI processing: {e}")
+                                # Fallback to basic save
+                                if self.save_scraped_image(**image_data):
+                                    images.append(image_data)
+                        else:
+                            # Save to database without AI processing
+                            if self.save_scraped_image(**image_data):
+                                images.append(image_data)
+                                print(f"Scraped {len(images)}/{limit} images from JSON...")
                             
                 except json.JSONDecodeError:
                     pass

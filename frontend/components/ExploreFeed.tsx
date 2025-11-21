@@ -73,10 +73,38 @@ export default function ExploreFeed({ onImageClick }: ExploreFeedProps) {
               className="object-cover"
               unoptimized
             />
+            {/* AI metadata badges */}
+            {(image.detected_class || image.extracted_colors?.length) && (
+              <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                {image.detected_class && (
+                  <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-medium">
+                    {image.detected_class}
+                  </span>
+                )}
+                {image.extracted_colors?.slice(0, 2).map((color, idx) => (
+                  <span
+                    key={idx}
+                    className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-medium"
+                  >
+                    {color}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition">
               <div className="absolute bottom-0 left-0 right-0 p-2 text-white text-sm opacity-0 group-hover:opacity-100 transition">
                 {image.caption && (
                   <p className="line-clamp-2">{image.caption}</p>
+                )}
+                {image.extracted_brands?.length > 0 && (
+                  <p className="text-xs mt-1 text-yellow-300">
+                    Brand: {image.extracted_brands.join(", ")}
+                  </p>
+                )}
+                {image.extracted_styles?.length > 0 && (
+                  <p className="text-xs text-gray-300">
+                    Style: {image.extracted_styles.slice(0, 2).join(", ")}
+                  </p>
                 )}
                 <p className="text-xs mt-1">Click to search similar</p>
               </div>

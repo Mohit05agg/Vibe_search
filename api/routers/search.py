@@ -16,6 +16,7 @@ from api.models import (
 )
 from api.database import get_db_connection
 from api.search_utils import build_filter_query, execute_vector_search
+from api.query_parser import QueryParser
 
 router = APIRouter()
 
@@ -174,6 +175,22 @@ async def search_by_image_upload(
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         image_embedding_tensor = image_features[0]
     
+    # Parse text query for filters, categories, and negative keywords
+    query_parser = QueryParser()
+    parsed_query = query_parser.parse(text_query) if text_query and text_query.strip() else {}
+    
+    # Override category from parsed query if found
+    if parsed_query.get('categories') and not category:
+        category = parsed_query['categories'][0]  # Use first category found
+    
+    # Merge price filters from query parsing
+    min_price_from_query = parsed_query.get('min_price')
+    max_price_from_query = parsed_query.get('max_price')
+    if min_price_from_query is not None:
+        min_price = min_price if min_price is not None else min_price_from_query
+    if max_price_from_query is not None:
+        max_price = max_price if max_price is not None else max_price_from_query
+    
     # Generate text embedding if provided
     if text_query and text_query.strip():
         text_inputs = processor(text=[text_query.strip()], return_tensors="pt", padding=True, truncation=True)
@@ -201,7 +218,7 @@ async def search_by_image_upload(
     if colors:
         color_list = [c.strip() for c in colors.split(",") if c.strip()]
     
-    # Build filter conditions
+    # Build filter conditions with parsed query filters
     # Convert 0 to None for price filters (0 means "no filter")
     min_price_filter = None if (min_price is not None and min_price == 0) else min_price
     max_price_filter = None if (max_price is not None and max_price == 0) else max_price
@@ -212,18 +229,25 @@ async def search_by_image_upload(
         min_price=min_price_filter,
         max_price=max_price_filter,
         colors=color_list,
-        gender=gender
+        gender=gender,
+        exclude_categories=parsed_query.get('exclude_categories', []),
+        exclude_keywords=parsed_query.get('exclude_keywords', []),
+        keywords=parsed_query.get('keywords', [])
     )
     
-    # Execute vector search
+    # Execute vector search with hybrid search if keywords found
     conn = get_db_connection()
     try:
+        keywords_list = parsed_query.get('keywords', []) or []
+        use_hybrid = bool(keywords_list) and len(keywords_list) > 0
         products = execute_vector_search(
             conn=conn,
             query_embedding=query_embedding,
             embedding_column="image_embedding",
             limit=limit,
-            filter_conditions=filter_conditions
+            filter_conditions=filter_conditions,
+            keywords=keywords_list if use_hybrid else None,
+            use_hybrid=use_hybrid
         )
         
         query_time = (time.time() - start_time) * 1000  # Convert to ms
@@ -233,6 +257,21 @@ async def search_by_image_upload(
             total=len(products),
             query_time_ms=round(query_time, 2)
         )
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        # Print detailed error to console (visible in server terminal)
+        print("=" * 80)
+        print("ERROR in image upload search:")
+        print(error_details)
+        print("=" * 80)
+        import logging
+        logging.error(f"Image upload search error: {error_details}")
+        # Provide more helpful error message
+        error_msg = str(e)
+        if "tuple index out of range" in error_msg:
+            error_msg += " (SQL parameter mismatch)"
+        raise HTTPException(status_code=500, detail=f"Search error: {error_msg}")
     finally:
         conn.close()
 
@@ -243,9 +282,28 @@ async def search_by_text(request: TextSearchRequest):
     Search products by text query.
     
     Uses semantic search with sentence transformers for natural language queries.
-    Supports query expansion and hybrid search.
+    Supports query expansion, hybrid search, negative filtering, and category extraction.
     """
     start_time = time.time()
+    
+    # Parse query for filters, categories, and negative keywords
+    query_parser = QueryParser()
+    parsed_query = query_parser.parse(request.query) if request.query else {}
+    
+    # Override category from parsed query if found
+    category = request.category
+    if parsed_query.get('categories') and not category:
+        category = parsed_query['categories'][0]  # Use first category found
+    
+    # Merge price filters from query parsing
+    min_price = request.min_price
+    max_price = request.max_price
+    min_price_from_query = parsed_query.get('min_price')
+    max_price_from_query = parsed_query.get('max_price')
+    if min_price_from_query is not None:
+        min_price = min_price if min_price is not None else min_price_from_query
+    if max_price_from_query is not None:
+        max_price = max_price if max_price is not None else max_price_from_query
     
     # Generate text embedding
     model = get_text_model()
@@ -253,8 +311,8 @@ async def search_by_text(request: TextSearchRequest):
     
     # Build filter conditions
     # Convert 0 to None for price filters (0 means "no filter")
-    min_price_filter = None if (request.min_price is not None and request.min_price == 0) else request.min_price
-    max_price_filter = None if (request.max_price is not None and request.max_price == 0) else request.max_price
+    min_price_filter = None if (min_price is not None and min_price == 0) else min_price
+    max_price_filter = None if (max_price is not None and max_price == 0) else max_price
     
     # Filter out "string" placeholder values from colors list
     colors_filter = None
@@ -264,27 +322,35 @@ async def search_by_text(request: TextSearchRequest):
             colors_filter = None
     
     filter_conditions = build_filter_query(
-        category=request.category,
+        category=category,
         brand=request.brand,
         min_price=min_price_filter,
         max_price=max_price_filter,
         colors=colors_filter,
-        gender=request.gender
+        gender=request.gender,
+        exclude_categories=parsed_query.get('exclude_categories', []),
+        exclude_keywords=parsed_query.get('exclude_keywords', []),
+        keywords=parsed_query.get('keywords', [])
     )
     
     # Debug: Log the filter conditions (remove in production)
     import logging
     logging.info(f"Text search filter: {filter_conditions}")
+    logging.info(f"Parsed query: {parsed_query}")
     
-    # Execute vector search
+    # Execute vector search with hybrid search if keywords found
     conn = get_db_connection()
     try:
+        keywords_list = parsed_query.get('keywords', []) or []
+        use_hybrid = bool(keywords_list) and len(keywords_list) > 0
         products = execute_vector_search(
             conn=conn,
             query_embedding=query_embedding,
             embedding_column="text_embedding",
             limit=request.limit,
-            filter_conditions=filter_conditions
+            filter_conditions=filter_conditions,
+            keywords=keywords_list if use_hybrid else None,
+            use_hybrid=use_hybrid
         )
         
         query_time = (time.time() - start_time) * 1000  # Convert to ms
@@ -294,6 +360,19 @@ async def search_by_text(request: TextSearchRequest):
             total=len(products),
             query_time_ms=round(query_time, 2)
         )
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        # Print detailed error to console (visible in server terminal)
+        print("=" * 80)
+        print("ERROR in text search:")
+        print(error_details)
+        print("=" * 80)
+        import logging
+        logging.error(f"Text search error: {error_details}")
+        # Provide more helpful error message
+        error_msg = str(e)
+        raise HTTPException(status_code=500, detail=f"Search error: {error_msg}")
     finally:
         conn.close()
 
