@@ -1,288 +1,340 @@
-# Vibe_search
-
 # Vibe Search - Multimodal Fashion Search Engine
 
-A full-stack multimodal search engine that combines visual and text-based product discovery for fashion and lifestyle items. Similar to the Shoppin app, allowing users to search products using either images or natural language queries.
+A full-stack multimodal search engine that combines visual AI, natural language processing, and vector search for fashion product discovery. Search products using images, natural language queries, or both.
+
+![Architecture](https://img.shields.io/badge/Architecture-FastAPI%20%2B%20Next.js%20%2B%20PostgreSQL-blue)
+![AI](https://img.shields.io/badge/AI-CLIP%20%2B%20YOLO%20%2B%20Sentence%20Transformers-green)
+![Database](https://img.shields.io/badge/Database-PostgreSQL%20%2B%20pgvector-orange)
 
 ## 🚀 Features
 
-- **Visual Search**: Upload an image and find similar products using CLIP embeddings
-- **Text Search**: Natural language queries with semantic understanding
-- **Metadata Extraction**: Automatic extraction of brands, colors, and styles from product titles
-- **Web Scraping**: Collects fashion images from Pinterest and Instagram
-- **Vector Database**: PostgreSQL with pgvector for efficient similarity search
-- **RESTful API**: FastAPI backend with comprehensive search endpoints
-- **Modern Frontend**: Next.js 14+ with Tailwind CSS and shadcn/ui (coming soon)
+### Core Search
+- **Visual Search**: Upload an image and find visually similar products using CLIP embeddings (512-dim)
+- **Text Search**: Natural language queries with semantic understanding (384-dim embeddings)
+- **Hybrid Search**: Combines vector similarity with keyword matching for better relevance
+- **Natural Language Parsing**: Understands queries like "black sneakers under $50 but not boots"
 
-## 📋 Project Structure
+### AI-Powered Features
+- **Negative Filtering**: "similar items but NOT sneakers" excludes specific items
+- **Price Extraction**: "under $50", "over $100", "$25-75" parsed automatically
+- **Category Detection**: Automatic category extraction from queries
+- **Quality Filtering**: Blur detection, NSFW filtering, resolution checks
+
+### Web Scraping + AI Processing
+- **Pinterest & Instagram Scrapers**: Automated fashion image collection
+- **AI Processing Pipeline**: 
+  - Quality filtering (blur, NSFW, brightness)
+  - Object detection (YOLOv8 for fashion items)
+  - CLIP embedding generation
+  - Color extraction (K-means clustering)
+  - Metadata extraction (styles, brands)
+
+### Frontend
+- **Modern UI**: Next.js 14+ with TypeScript and Tailwind CSS
+- **Image Upload**: Drag & drop or click to upload
+- **Real-time Search**: Instant results with similarity scores
+- **Explore Feed**: Browse AI-processed scraped images
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    FRONTEND (Port 3000)                      │
+│  Next.js + React + TypeScript + Tailwind CSS                │
+│  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │
+│  │ SearchInterface│  │  ResultsGrid   │  │ ExploreFeed  │  │
+│  └────────────────┘  └────────────────┘  └──────────────┘  │
+└─────────────────────────────┬───────────────────────────────┘
+                              │ HTTP/REST API
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    BACKEND (Port 8000)                       │
+│  FastAPI + Python                                            │
+│  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  │
+│  │  Query Parser  │  │ Search Utils   │  │  AI Models   │  │
+│  │  - Categories  │  │ - Vector Search│  │  - CLIP      │  │
+│  │  - Negatives   │  │ - Hybrid Search│  │  - YOLO      │  │
+│  │  - Price       │  │ - Filters      │  │  - SentTrans │  │
+│  └────────────────┘  └────────────────┘  └──────────────┘  │
+└─────────────────────────────┬───────────────────────────────┘
+                              │ SQL + Vector Queries
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    DATABASE (Port 5432)                      │
+│  PostgreSQL 18 + pgvector                                    │
+│  ┌────────────────┐  ┌────────────────┐                     │
+│  │    products    │  │ scraped_images │                     │
+│  │  - 491 items   │  │ - AI processed │                     │
+│  │  - Embeddings  │  │ - Embeddings   │                     │
+│  │  - Metadata    │  │ - Detections   │                     │
+│  └────────────────┘  └────────────────┘                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📁 Project Structure
 
 ```
 CultureCircleTask/
-├── api/                    # FastAPI backend
-│   ├── main.py            # Main application
-│   ├── routers/           # API routes
-│   ├── models.py          # Pydantic models
-│   └── search_utils.py    # Search utilities
-├── database/              # Database scripts
-│   ├── schema.sql         # Database schema
-│   ├── import_products.py # CSV import script
-│   └── setup_database.py  # Database setup
-├── embeddings/            # Embedding generation
-│   ├── generate_clip_embeddings.py
-│   └── generate_text_embeddings.py
-├── metadata/              # Metadata extraction
-│   └── extract_metadata.py
-├── scrapers/              # Web scrapers
-│   ├── pinterest_scraper.py
-│   ├── instagram_scraper.py
-│   └── run_scrapers.py
-├── products_export_*.csv  # Product data
-└── requirements.txt       # Python dependencies
+├── api/                          # FastAPI Backend
+│   ├── main.py                   # Application entry point
+│   ├── database.py               # Database connection
+│   ├── models.py                 # Pydantic schemas
+│   ├── query_parser.py           # Natural language parsing
+│   ├── search_utils.py           # Vector search logic
+│   └── routers/
+│       ├── search.py             # Search endpoints
+│       ├── feed.py               # Scraped images feed
+│       └── health.py             # Health check
+│
+├── ai/                           # AI/ML Modules
+│   ├── clip_embedding.py         # CLIP model integration
+│   ├── object_detector.py        # YOLO object detection
+│   ├── quality_filter.py         # Image quality filtering
+│   ├── metadata_extractor.py     # Color/style extraction
+│   └── processing_pipeline.py    # AI workflow orchestration
+│
+├── scrapers/                     # Web Scrapers
+│   ├── base_scraper.py           # Base class with DB ops
+│   ├── pinterest_scraper.py      # Pinterest scraper
+│   ├── instagram_scraper.py      # Instagram scraper
+│   └── run_scrapers.py           # CLI runner
+│
+├── database/                     # Database Scripts
+│   ├── schema.sql                # Main schema
+│   ├── schema_update_scraped_images.sql  # AI fields migration
+│   ├── setup_database.py         # Schema setup
+│   └── import_products.py        # CSV import
+│
+├── embeddings/                   # Batch Processing
+│   ├── generate_clip_embeddings.py   # Image embeddings
+│   └── generate_text_embeddings.py   # Text embeddings
+│
+├── frontend/                     # Next.js Frontend
+│   ├── app/
+│   │   ├── page.tsx              # Main page
+│   │   └── layout.tsx            # App layout
+│   ├── components/
+│   │   ├── SearchInterface.tsx   # Search UI
+│   │   ├── ResultsGrid.tsx       # Results display
+│   │   └── ExploreFeed.tsx       # Scraped images feed
+│   └── types/
+│       └── index.ts              # TypeScript interfaces
+│
+├── run_server.py                 # Start backend
+├── requirements.txt              # Python dependencies
+└── README.md                     # This file
 ```
 
-## 🛠️ Setup Instructions
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
-
 - Python 3.11+
 - Node.js 18+
-- PostgreSQL 18+ (with pgvector extension)
-- WSL (Windows Subsystem for Linux) for PostgreSQL on Windows
+- PostgreSQL 18+ with pgvector extension
 
-### 1. Environment Setup
-
-#### Install Python Dependencies
+### 1. Install Dependencies
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-# Windows:
-.venv\Scripts\Activate.ps1
-# Linux/Mac:
-source .venv/bin/activate
-
-# Install dependencies
+# Python dependencies
 pip install -r requirements.txt
+
+# Frontend dependencies
+cd frontend
+npm install
+cd ..
+
+# Install Playwright browsers (for scraping)
+playwright install chromium
 ```
 
-#### Install PostgreSQL with pgvector (WSL)
+### 2. Setup Database
 
 ```bash
-# In WSL terminal
-sudo apt update
-sudo apt install postgresql-18 postgresql-contrib-18 -y
-sudo apt install build-essential git postgresql-server-dev-18 -y
-
-# Install pgvector
-git clone https://github.com/pgvector/pgvector.git
-cd pgvector
-make
-sudo make install
-sudo service postgresql restart
-
-# Create database
-sudo -u postgres psql
+# Create database and enable pgvector
+psql -U postgres
 CREATE DATABASE vibe_search;
 \c vibe_search
 CREATE EXTENSION vector;
-```
+\q
 
-### 2. Database Setup
-
-```bash
-# Setup database schema
+# Setup schema
 python database/setup_database.py
 
-# Import product data
+# Import products
 python database/import_products.py
 ```
 
 ### 3. Generate Embeddings
 
 ```bash
-# Generate CLIP embeddings for images
+# Generate CLIP embeddings for product images
 python embeddings/generate_clip_embeddings.py
 
-# Generate text embeddings
+# Generate text embeddings for product titles
 python embeddings/generate_text_embeddings.py
 ```
 
-### 4. Extract Metadata
+### 4. Start the Application
 
 ```bash
-# Extract colors, styles, brands from product titles
-python metadata/extract_metadata.py
-```
-
-### 5. Run Scrapers
-
-```bash
-# Scrape Pinterest and Instagram
-python scrapers/run_scrapers.py
-
-# Or scrape specific source
-python scrapers/run_scrapers.py --source pinterest --limit 50
-```
-
-### 6. Start Backend API
-
-```bash
-# Start FastAPI server
+# Terminal 1: Start Backend
 python run_server.py
+# Backend runs on http://localhost:8000
 
-# API will be available at http://localhost:8000
-# API docs at http://localhost:8000/docs
+# Terminal 2: Start Frontend
+cd frontend
+npm run dev
+# Frontend runs on http://localhost:3000
 ```
+
+### 5. Access the Application
+- **Frontend**: http://localhost:3000
+- **API Documentation**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/api/health
+
+---
 
 ## 📡 API Endpoints
 
 ### Health Check
-```
+```http
 GET /api/health
 ```
 
-### Image Search
-```
-POST /api/search/image
-Body: {
-  "image_url": "https://example.com/image.jpg",
+### Text Search
+```http
+POST /api/search/text
+Content-Type: application/json
+
+{
+  "query": "black sneakers under $50 but not boots",
   "limit": 20,
-  "category": "Apparel",
+  "category": "Footwear",
   "brand": "Nike",
   "min_price": 0,
-  "max_price": 1000,
-  "colors": ["black", "white"],
+  "max_price": 50,
+  "colors": ["black"],
   "gender": "male"
 }
 ```
 
-### Text Search
+### Image Upload Search
+```http
+POST /api/search/image/upload
+Content-Type: multipart/form-data
+
+image_file: <file>
+text_query: "similar items"
+limit: 20
 ```
-POST /api/search/text
-Body: {
-  "query": "beach shorts for summer",
-  "limit": 20,
-  "category": "Apparel",
-  "brand": "Adidas",
-  "min_price": 0,
-  "max_price": 500,
-  "colors": ["blue"],
-  "gender": "unisex"
+
+### Image URL Search
+```http
+POST /api/search/image
+Content-Type: application/json
+
+{
+  "image_url": "https://example.com/shoe.jpg",
+  "limit": 20
 }
 ```
 
-## 🎯 Target Boards/Pages
+### Scraped Images Feed
+```http
+GET /api/feed/scraped?limit=20&offset=0
+```
 
-### Pinterest Boards
-- Minimal Streetwear
-- Men's Streetwear Outfit Ideas
-- Streetwear Outfit Ideas
-- Streetwear Fashion Instagram
-- Luxury Fashion
-- Luxury Classy Outfits
-- Luxury Streetwear Brands
+---
 
-### Instagram Pages
-- @minimalstreetstyle
-- @outfitgrid
-- @outfitpage
-- @mensfashionpost
-- @stadiumgoods
-- @flightclub
-- @hodinkee
-- @wristcheck
-- @purseblog
-- @sunglasshut
-- @rayban
-- @prada
-- @cartier
-- @thesolesupplier
+## 🔍 Natural Language Query Examples
 
-## 📦 Sharing the Project
+The query parser understands:
 
-### Option 1: GitHub Repository
+| Query | Parsed Result |
+|-------|---------------|
+| "black sneakers under $50" | category: shoes, max_price: 50, keywords: [black, sneakers] |
+| "similar outfit but not shoes" | exclude_categories: [shoes] |
+| "luxury watch $100-500" | min_price: 100, max_price: 500 |
+| "show me tops but no hoodies" | category: tops, exclude_keywords: [hoodies] |
+| "items over $200" | min_price: 200 |
 
-1. **Initialize Git** (if not already done):
+---
+
+## 🕷️ Web Scraping
+
+### Run Pinterest Scraper
 ```bash
-git init
-git add .
-git commit -m "Initial commit: Vibe Search MVP"
+# Scrape 50 images from Pinterest
+python scrapers/run_scrapers.py --source pinterest --limit 50
+
+# Fast mode (shorter delays)
+python scrapers/run_scrapers.py --source pinterest --limit 10 --fast
 ```
 
-2. **Create .gitignore**:
-```gitignore
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-.venv/
-venv/
-ENV/
-env/
-
-# Database
-*.db
-*.sqlite
-
-# Environment
-.env
-.env.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Node
-node_modules/
-.next/
-out/
-dist/
-
-# Logs
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
-```
-
-3. **Push to GitHub**:
+### Run Instagram Scraper
 ```bash
-# Create repository on GitHub, then:
-git remote add origin https://github.com/yourusername/vibe-search.git
-git branch -M main
-git push -u origin main
+python scrapers/run_scrapers.py --source instagram --limit 50
 ```
 
-### Option 2: Docker Deployment
+### AI Processing Pipeline
+Each scraped image goes through:
+1. **Quality Filter**: Reject blurry, NSFW, low-resolution images
+2. **Object Detection**: YOLO identifies fashion items (shoes, tops, etc.)
+3. **CLIP Embedding**: Generate 512-dim visual embedding
+4. **Color Extraction**: K-means clustering for dominant colors
+5. **Metadata Extraction**: Extract styles and brands
 
-Create `Dockerfile` and `docker-compose.yml` for easy deployment:
+---
 
-```bash
-# Build and run with Docker
-docker-compose up -d
+## 🗄️ Database Schema
+
+### Products Table
+```sql
+CREATE TABLE products (
+    id BIGSERIAL PRIMARY KEY,
+    product_id VARCHAR(50) UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    category VARCHAR(100),
+    sub_category VARCHAR(100),
+    brand_name VARCHAR(100),
+    lowest_price DECIMAL(10, 2),
+    featured_image TEXT,
+    image_embedding vector(512),    -- CLIP embedding
+    text_embedding vector(384),     -- Sentence transformer
+    extracted_colors TEXT[],
+    extracted_styles TEXT[],
+    is_active BOOLEAN DEFAULT TRUE
+);
 ```
 
-### Option 3: Export as ZIP
-
-```bash
-# Create archive excluding unnecessary files
-# On Windows:
-Compress-Archive -Path . -DestinationPath vibe-search.zip -Exclude @('.venv','__pycache__','*.pyc','.git')
+### Scraped Images Table
+```sql
+CREATE TABLE scraped_images (
+    id BIGSERIAL PRIMARY KEY,
+    source VARCHAR(50) NOT NULL,
+    image_url TEXT NOT NULL,
+    caption TEXT,
+    image_embedding vector(512),
+    detected_class VARCHAR(100),    -- YOLO detection
+    bbox INTEGER[],                 -- Bounding box
+    extracted_colors TEXT[],
+    extracted_styles TEXT[],
+    quality_score JSONB,
+    UNIQUE(source, image_url)
+);
 ```
+
+---
 
 ## 🔧 Configuration
 
-### Environment Variables
-
-Create a `.env` file:
-
+### Environment Variables (.env)
 ```env
 # Database
 DB_HOST=localhost
@@ -299,54 +351,106 @@ API_PORT=8000
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
+---
+
 ## 📊 Current Status
 
 - ✅ Database schema with pgvector
 - ✅ Product data import (491 products)
-- ✅ Metadata extraction (colors, styles, brands)
-- ✅ CLIP embeddings (487 products)
-- ✅ Text embeddings (491 products)
+- ✅ CLIP image embeddings (512-dim)
+- ✅ Text embeddings (384-dim)
 - ✅ FastAPI backend with search endpoints
-- ✅ Pinterest scraper (working)
-- ✅ Instagram scraper (limited by anti-bot measures)
-- 🚧 Next.js frontend (in progress)
+- ✅ Natural language query parsing
+- ✅ Hybrid search (vector + keyword)
+- ✅ Negative filtering ("not shoes")
+- ✅ Price extraction from queries
+- ✅ Pinterest scraper with AI processing
+- ✅ Instagram scraper with AI processing
+- ✅ Next.js frontend with search UI
+- ✅ Explore feed for scraped images
+
+---
 
 ## 🧪 Testing
 
 ```bash
-# Test scrapers
-python scrapers/test_scraper.py
-
-# Test API (after starting server)
+# Test API health
 curl http://localhost:8000/api/health
 
-# Test search
+# Test text search
 curl -X POST http://localhost:8000/api/search/text \
   -H "Content-Type: application/json" \
-  -d '{"query": "black sneakers", "limit": 5}'
+  -d '{"query": "black sneakers under $50", "limit": 5}'
+
+# Test query parser
+python -c "from api.query_parser import QueryParser; p = QueryParser(); print(p.parse('black sneakers under \$50 but not boots'))"
 ```
 
-## 📝 Documentation
+---
 
-- API Documentation: http://localhost:8000/docs (when server is running)
-- Database Schema: `database/schema.sql`
-- Scraper README: `scrapers/README.md`
+## 📚 Documentation
 
-## 🤝 Contributing
+- **API Docs**: http://localhost:8000/docs (interactive Swagger UI)
+- **Architecture**: `ARCHITECTURE_DIAGRAM.md`
+- **Interview Prep**: `INTERVIEW_ROADMAP.md`
+- **Demo Guide**: `PROJECT_EXPLANATION_GUIDE.md`
+- **Quick Demo**: `QUICK_DEMO_CHECKLIST.md`
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+---
 
-## 📄 License
+## 🛠️ Tech Stack
 
-This project is part of a technical assessment.
+### Backend
+- **FastAPI**: Modern async Python web framework
+- **psycopg2**: PostgreSQL database driver
+- **Pydantic**: Data validation and schemas
+
+### AI/ML
+- **CLIP** (OpenAI): Visual embeddings (512-dim)
+- **Sentence Transformers**: Text embeddings (384-dim)
+- **YOLOv8**: Object detection for fashion items
+- **OpenCV**: Image processing and quality metrics
+- **NudeNet**: NSFW detection
+
+### Database
+- **PostgreSQL 18**: Relational database
+- **pgvector**: Vector similarity search extension
+- **HNSW Index**: Fast approximate nearest neighbor search
+
+### Frontend
+- **Next.js 14**: React framework with App Router
+- **TypeScript**: Type-safe JavaScript
+- **Tailwind CSS**: Utility-first styling
+- **Lucide React**: Icon library
+
+### Scraping
+- **Playwright**: Browser automation
+- **BeautifulSoup**: HTML parsing
+
+---
 
 ## 🙏 Acknowledgments
 
-- OpenAI CLIP for visual embeddings
-- Sentence Transformers for text embeddings
-- pgvector for vector similarity search
-- FastAPI for the backend framework
+- [OpenAI CLIP](https://github.com/openai/CLIP) for visual embeddings
+- [Sentence Transformers](https://www.sbert.net/) for text embeddings
+- [pgvector](https://github.com/pgvector/pgvector) for vector search
+- [FastAPI](https://fastapi.tiangolo.com/) for the backend framework
+- [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLOv8
 
+---
+
+## 📄 License
+
+This project is part of a technical assessment for Culture Circle.
+
+---
+
+## 🚀 Quick Demo
+
+1. Start both servers (backend + frontend)
+2. Open http://localhost:3000
+3. Try text search: "black sneakers under $50 but not boots"
+4. Try image search: upload any fashion image
+5. Explore the feed: view AI-processed scraped images
+
+**That's Vibe Search - Multimodal AI-powered fashion search!**
