@@ -439,12 +439,6 @@ python -c "from api.query_parser import QueryParser; p = QueryParser(); print(p.
 
 ---
 
-## 📄 License
-
-This project is part of a technical assessment for Culture Circle.
-
----
-
 ## 🚀 Quick Demo
 
 1. Start both servers (backend + frontend)
